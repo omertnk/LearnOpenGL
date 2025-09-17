@@ -22,8 +22,10 @@ void framebuffer_size_callback(GLFWwindow* window, int width, int height);
 void mouse_callback(GLFWwindow* window, double xpos, double ypos);
 void scroll_callback(GLFWwindow* window, double xoffset, double yoffset);
 void processInput(GLFWwindow* window);
-void EditObjectColor(glm::vec4& inColor);
+void EditObjectColor(glm::vec3& inColor);
 void UpdateLightPos(glm::vec3& lightPos);
+void MaterialProperties(glm::vec3& ambient, glm::vec3& diffuse, glm::vec3& specular, float& shininess);
+void LightProperties(glm::vec3& ambient, glm::vec3& diffuse, glm::vec3& specular);
 
 // settings
 const unsigned int SCR_WIDTH = 800;
@@ -177,7 +179,18 @@ int main()
 
 #pragma endregion
 
-	glm::vec4 objectColor(1.0f, 0.5f, 0.31f, 1.0f);
+	glm::vec3 objectColor(1.0f, 0.5f, 0.31f);
+
+	// material properties
+	glm::vec3 m_ambient = glm::vec3(1.0f, 0.5f, 0.31f);
+	glm::vec3 m_diffuse = glm::vec3(1.0f, 0.5f, 0.31f);
+	glm::vec3 m_specular = glm::vec3(0.5f, 0.5f, 0.5f);
+	float m_shininess = 32.0f;
+
+	// light properties
+	glm::vec3 diffuseColor = objectColor * glm::vec3(0.5f); // decrease the influence
+	glm::vec3 ambientColor = diffuseColor * glm::vec3(0.2f); // low influence
+	glm::vec3 specularColor = glm::vec3(1.0f);
 
 
 	// render loop
@@ -204,12 +217,25 @@ int main()
 		ImGui_ImplGlfw_NewFrame();
 		ImGui::NewFrame();
 
+
+
 		// activate shader
 		lightingShader.use();
 		lightingShader.setVec3("objectColor", objectColor);
 		lightingShader.setVec3("lightColor", 1.0f, 1.0f, 1.0f);
 		lightingShader.setVec3("lightPos", lightPos);
 		lightingShader.setVec3("viewPos", camera.Position);
+
+		
+
+		lightingShader.setVec3("material.ambient", m_ambient);
+		lightingShader.setVec3("material.diffuse", m_diffuse);
+		lightingShader.setVec3("material.specular", m_specular); // specular lighting doesn't have full effect on this object's material
+		lightingShader.setFloat("material.shininess", m_shininess);
+
+		lightingShader.setVec3("light.ambient", ambientColor);
+		lightingShader.setVec3("light.diffuse", diffuseColor);
+		lightingShader.setVec3("light.specular", 1.0f, 1.0f, 1.0f);
 
 		// pass projection matrix to shader (note that in this case it could change every frame)
 		glm::mat4 projection = glm::perspective(glm::radians(camera.Zoom), (float)SCR_WIDTH / (float)SCR_HEIGHT, 0.1f, 100.0f);
@@ -242,8 +268,11 @@ int main()
 
 		EditObjectColor(objectColor);
 		UpdateLightPos(lightPos);
+		MaterialProperties(m_ambient, m_diffuse, m_specular, m_shininess);
+		LightProperties(ambientColor, diffuseColor, specularColor);
 
 		ImGui::ShowDemoWindow();
+
 
 		// Rendering ImGui
 		ImGui::Render();
@@ -324,12 +353,12 @@ void processInput(GLFWwindow* window)
 
 }
 
-void EditObjectColor(glm::vec4& inColor)
+void EditObjectColor(glm::vec3& inColor)
 {
 	ImGui::Begin("Debug Window");
 
 	ImGui::Text("Object Color");
-	ImGui::ColorEdit4("Color", (float*)&inColor, ImGuiColorEditFlags_Float);
+	ImGui::ColorEdit3("Color", (float*)&inColor, ImGuiColorEditFlags_Float);
 
 	ImGui::End();
 }
@@ -337,9 +366,74 @@ void EditObjectColor(glm::vec4& inColor)
 void UpdateLightPos(glm::vec3& lightPos)
 {
 	ImGui::Begin("Debug Window");
-	ImGui::SliderFloat("X", &lightPos.x, -10.0f, 10.0f, "%.1f", ImGuiSliderFlags_Logarithmic);
-	ImGui::SliderFloat("Y", &lightPos.y, -10.0f, 10.0f, "%.1f", ImGuiSliderFlags_Logarithmic);
-	ImGui::SliderFloat("Z", &lightPos.z, -10.0f, 10.0f, "%.1f", ImGuiSliderFlags_Logarithmic);
+	ImGui::NewLine();
+	ImGui::Text("Light Position");
+
+	float sliderWidth = 100.0f;
+	ImGui::PushItemWidth(sliderWidth);
+
+	ImGui::SliderFloat("##X", &lightPos.x, -10.0f, 10.0f, "X: %.1f", ImGuiSliderFlags_Logarithmic);
+	ImGui::SameLine();
+	ImGui::SliderFloat("##Y", &lightPos.y, -10.0f, 10.0f, "Y: %.1f", ImGuiSliderFlags_Logarithmic);
+	ImGui::SameLine();
+	ImGui::SliderFloat("##Z", &lightPos.z, -10.0f, 10.0f, "Z: %.1f", ImGuiSliderFlags_Logarithmic);
+
+	ImGui::PopItemWidth();
+
+	ImGui::End();
+}
+
+void MaterialProperties(glm::vec3& ambient, glm::vec3& diffuse, glm::vec3& specular, float& shininess)
+{
+	ImGui::Begin("Debug Window");
+	ImGui::NewLine();
+
+	ImGui::Text("Material Properties");
+
+	// ambient
+	ImGui::DragFloat3("##m_ambient", &ambient.x, 0.01f, 0.f, 1.f);
+	ImGui::SameLine();
+	ImGui::Text("Ambient");
+
+	// diffuse
+	ImGui::DragFloat3("##m_diffuse", &diffuse.x, 0.01f, 0.f, 1.f);
+	ImGui::SameLine();
+	ImGui::Text("Diffuse");
+
+	// specular
+	ImGui::DragFloat3("##m_specular", &specular.x, 0.01f, 0.f, 1.f);
+	ImGui::SameLine();
+	ImGui::Text("Specular");
+
+	// shininess
+	ImGui::DragFloat("##shininess", &shininess, 0.01f, 1.f, 128.f);
+	ImGui::SameLine();
+	ImGui::Text("Shininess");
+
+	ImGui::End();
+}
+
+void LightProperties(glm::vec3& ambient, glm::vec3& diffuse, glm::vec3& specular)
+{
+	ImGui::Begin("Debug Window");
+	ImGui::NewLine();
+
+	ImGui::Text("Light Properties");
+
+	// ambient
+	ImGui::DragFloat3("##ambient", &ambient.x, 0.01f, 0.f, 1.f);
+	ImGui::SameLine();
+	ImGui::Text("Ambient");
+
+	// diffuse
+	ImGui::DragFloat3("##diffuse", &diffuse.x, 0.01f, 0.f, 1.f);
+	ImGui::SameLine();
+	ImGui::Text("Diffuse");
+
+	// specular
+	ImGui::DragFloat3("##specular", &specular.x, 0.01f, 0.f, 1.f);
+	ImGui::SameLine();
+	ImGui::Text("Specular");
 
 	ImGui::End();
 }

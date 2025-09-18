@@ -43,7 +43,6 @@ bool isCameraActive = true;
 float deltaTime = 0.0f;	// time between current frame and last frame
 float lastFrame = 0.0f;
 
-glm::vec3 lightPos(1.2f, 1.0f, 2.0f);
 
 
 int main()
@@ -136,6 +135,19 @@ int main()
 		-0.5f,  0.5f, -0.5f,  0.0f,  1.0f,  0.0f,  0.0f, 1.0f
 	};
 
+	glm::vec3 cubePositions[] = {
+	glm::vec3(0.0f,  0.0f,  0.0f),
+	glm::vec3(2.0f,  5.0f, -15.0f),
+	glm::vec3(-1.5f, -2.2f, -2.5f),
+	glm::vec3(-3.8f, -2.0f, -12.3f),
+	glm::vec3(2.4f, -0.4f, -3.5f),
+	glm::vec3(-1.7f,  3.0f, -7.5f),
+	glm::vec3(1.3f, -2.0f, -2.5f),
+	glm::vec3(1.5f,  2.0f, -2.5f),
+	glm::vec3(1.5f,  0.2f, -1.5f),
+	glm::vec3(-1.3f,  1.0f, -1.5f)
+	};
+
 	unsigned int VBO, cubeVAO;
 	glGenVertexArrays(1, &cubeVAO);
 	glGenBuffers(1, &VBO);
@@ -193,20 +205,16 @@ int main()
 
 #pragma endregion
 
-	glm::vec3 objectColor(1.0f, 0.5f, 0.31f);
-
+	
 	// material properties
-	glm::vec3 m_ambient = glm::vec3(1.0f, 0.5f, 0.31f);
-	glm::vec3 m_diffuse = glm::vec3(1.0f, 0.5f, 0.31f);
-	glm::vec3 m_specular = glm::vec3(0.5f, 0.5f, 0.5f);
 	float m_shininess = 32.0f;
 
 	// light properties
-	glm::vec3 diffuseColor = objectColor * glm::vec3(0.5f); // decrease the influence
-	glm::vec3 ambientColor = diffuseColor * glm::vec3(0.2f); // low influence
+	glm::vec3 diffuseColor = glm::vec3(0.5f, 0.5f, 0.5f); // decrease the influence
+	glm::vec3 ambientColor = glm::vec3(0.2f, 0.2f, 0.2f); // low influence
 	glm::vec3 specularColor = glm::vec3(1.0f);
 
-
+	
 	// render loop
 	// -----------
 	while (!glfwWindowShouldClose(window))
@@ -231,63 +239,74 @@ int main()
 		ImGui_ImplGlfw_NewFrame();
 		ImGui::NewFrame();
 
-		// activate shader
+		// be sure to activate shader when setting uniforms/drawing objects
 		lightingShader.use();
-		//lightingShader.setVec3("objectColor", objectColor);
-		//lightingShader.setVec3("lightColor", 1.0f, 1.0f, 1.0f);
-		lightingShader.setVec3("light.position", lightPos);
+		lightingShader.setVec3("light.position", camera.Position);
+		lightingShader.setVec3("light.direction", camera.Front);
+		lightingShader.setFloat("light.cutOff", glm::cos(glm::radians(12.5f)));
+		lightingShader.setFloat("light.outerCutOff", glm::cos(glm::radians(17.5f)));
 		lightingShader.setVec3("viewPos", camera.Position);
 
 		// light properties
-		lightingShader.setVec3("light.ambient", ambientColor);
-		lightingShader.setVec3("light.diffuse", diffuseColor);
-		lightingShader.setVec3("light.specular", specularColor);
+		lightingShader.setVec3("light.ambient", 0.1f, 0.1f, 0.1f);
+		// we configure the diffuse intensity slightly higher; the right lighting conditions differ with each lighting method and environment.
+		// each environment and lighting type requires some tweaking to get the best out of your environment.
+		lightingShader.setVec3("light.diffuse", 0.8f, 0.8f, 0.8f);
+		lightingShader.setVec3("light.specular", 1.0f, 1.0f, 1.0f);
+		lightingShader.setFloat("light.constant", 1.0f);
+		lightingShader.setFloat("light.linear", 0.09f);
+		lightingShader.setFloat("light.quadratic", 0.032f);
 
 		// material properties
-		//lightingShader.setVec3("material.ambient", m_ambient);
-		lightingShader.setVec3("material.diffuse", m_diffuse);
-		lightingShader.setVec3("material.specular", m_specular); // specular lighting doesn't have full effect on this object's material
-		lightingShader.setFloat("material.shininess", m_shininess);
+		lightingShader.setFloat("material.shininess", 32.0f);
 
-		
-
-		// pass projection matrix to shader (note that in this case it could change every frame)
+		// view/projection transformations
 		glm::mat4 projection = glm::perspective(glm::radians(camera.Zoom), (float)SCR_WIDTH / (float)SCR_HEIGHT, 0.1f, 100.0f);
-		lightingShader.setMat4("projection", projection);
-
-		// camera/view transformation
 		glm::mat4 view = camera.GetViewMatrix();
+		lightingShader.setMat4("projection", projection);
 		lightingShader.setMat4("view", view);
 
+		// world transformation
 		glm::mat4 model = glm::mat4(1.0f);
 		lightingShader.setMat4("model", model);
 
+		// bind diffuse map
 		glActiveTexture(GL_TEXTURE0);
 		glBindTexture(GL_TEXTURE_2D, diffuseMap);
+		// bind specular map
 		glActiveTexture(GL_TEXTURE1);
 		glBindTexture(GL_TEXTURE_2D, specularMap);
 
-		// render the cube
+		// render containers
 		glBindVertexArray(cubeVAO);
-		glDrawArrays(GL_TRIANGLES, 0, 36);
+		for (unsigned int i = 0; i < 10; i++)
+		{
+			// calculate the model matrix for each object and pass it to shader before drawing
+			glm::mat4 model = glm::mat4(1.0f);
+			model = glm::translate(model, cubePositions[i]);
+			float angle = 20.0f * i;
+			model = glm::rotate(model, glm::radians(angle), glm::vec3(1.0f, 0.3f, 0.5f));
+			lightingShader.setMat4("model", model);
 
-		lightCubeShader.use();
-		
+			glDrawArrays(GL_TRIANGLES, 0, 36);
+		}
+
+		/*lightCubeShader.use();
 		model = glm::mat4(1.0f);
 		model = glm::translate(model, lightPos);
-		model = glm::scale(model, glm::vec3(0.8f));
+		model = glm::scale(model, glm::vec3(0.2f));
 		lightCubeShader.setMat4("projection", projection);
 		lightCubeShader.setMat4("view", view);
 		lightCubeShader.setMat4("model", model);
 
 		glBindVertexArray(lightCubeVAO);
-		glDrawArrays(GL_TRIANGLES, 0, 36);
+		glDrawArrays(GL_TRIANGLES, 0, 36);*/
 
 
-		EditObjectColor(objectColor);
-		UpdateLightPos(lightPos);
-		MaterialProperties(m_ambient, m_diffuse, m_specular, m_shininess);
-		LightProperties(ambientColor, diffuseColor, specularColor);
+		//EditObjectColor(objectColor);
+		//UpdateLightPos(lightPos);
+		//MaterialProperties(m_ambient, m_diffuse, m_specular, m_shininess);
+		//LightProperties(ambientColor, diffuseColor, specularColor);
 
 		ImGui::ShowDemoWindow();
 
@@ -317,6 +336,7 @@ int main()
 	// optional: de-allocate all resources once they've outlived their purpose:
 	// ------------------------------------------------------------------------
 	glDeleteVertexArrays(1, &cubeVAO);
+	glDeleteVertexArrays(1, &lightCubeVAO);
 	glDeleteBuffers(1, &VBO);
 
 	// glfw: terminate, clearing all previously allocated GLFW resources.
@@ -390,11 +410,11 @@ void UpdateLightPos(glm::vec3& lightPos)
 	float sliderWidth = 100.0f;
 	ImGui::PushItemWidth(sliderWidth);
 
-	ImGui::SliderFloat("##X", &lightPos.x, -10.0f, 10.0f, "X: %.1f", ImGuiSliderFlags_Logarithmic);
+	ImGui::SliderFloat("##X", &lightPos.x, -10.0f, 100.0f, "X: %.1f", ImGuiSliderFlags_Logarithmic);
 	ImGui::SameLine();
-	ImGui::SliderFloat("##Y", &lightPos.y, -10.0f, 10.0f, "Y: %.1f", ImGuiSliderFlags_Logarithmic);
+	ImGui::SliderFloat("##Y", &lightPos.y, -10.0f, 100.0f, "Y: %.1f", ImGuiSliderFlags_Logarithmic);
 	ImGui::SameLine();
-	ImGui::SliderFloat("##Z", &lightPos.z, -10.0f, 10.0f, "Z: %.1f", ImGuiSliderFlags_Logarithmic);
+	ImGui::SliderFloat("##Z", &lightPos.z, -10.0f, 100.0f, "Z: %.1f", ImGuiSliderFlags_Logarithmic);
 
 	ImGui::PopItemWidth();
 
@@ -409,19 +429,19 @@ void MaterialProperties(glm::vec3& ambient, glm::vec3& diffuse, glm::vec3& specu
 	ImGui::Text("Material Properties");
 
 	// ambient
-	ImGui::DragFloat3("##m_ambient", &ambient.x, 0.01f, 0.f, 1.f);
-	ImGui::SameLine();
-	ImGui::Text("Ambient");
+	//ImGui::DragFloat3("##m_ambient", &ambient.x, 0.01f, 0.f, 1.f);
+	//ImGui::SameLine();
+	//ImGui::Text("Ambient");
 
-	// diffuse
-	ImGui::DragFloat3("##m_diffuse", &diffuse.x, 0.01f, 0.f, 1.f);
-	ImGui::SameLine();
-	ImGui::Text("Diffuse");
+	//// diffuse
+	//ImGui::DragFloat3("##m_diffuse", &diffuse.x, 0.01f, 0.f, 1.f);
+	//ImGui::SameLine();
+	//ImGui::Text("Diffuse");
 
-	// specular
-	ImGui::DragFloat3("##m_specular", &specular.x, 0.01f, 0.f, 1.f);
-	ImGui::SameLine();
-	ImGui::Text("Specular");
+	//// specular
+	//ImGui::DragFloat3("##m_specular", &specular.x, 0.01f, 0.f, 1.f);
+	//ImGui::SameLine();
+	//ImGui::Text("Specular");
 
 	// shininess
 	ImGui::DragFloat("##shininess", &shininess, 0.01f, 1.f, 128.f);
@@ -461,7 +481,6 @@ unsigned int loadTexture(const char* path)
 	unsigned int textureID;
 
 	glGenTextures(1, &textureID);
-	glBindTexture(GL_TEXTURE_2D, textureID);
 
 	int width, height, nrComponents;
 	unsigned char* data = stbi_load(path, &width, &height, &nrComponents, 0);

@@ -17,17 +17,6 @@
 #include "Shader.h"
 #include "Camera.h"
 
-
-void framebuffer_size_callback(GLFWwindow* window, int width, int height);
-void mouse_callback(GLFWwindow* window, double xpos, double ypos);
-void scroll_callback(GLFWwindow* window, double xoffset, double yoffset);
-void processInput(GLFWwindow* window);
-void EditObjectColor(glm::vec3& inColor);
-void UpdateLightPos(glm::vec3& lightPos);
-void MaterialProperties(glm::vec3& ambient, glm::vec3& diffuse, glm::vec3& specular, float& shininess);
-void LightProperties(glm::vec3& ambient, glm::vec3& diffuse, glm::vec3& specular);
-unsigned int loadTexture(const char* path);
-
 // settings
 const unsigned int SCR_WIDTH = 800;
 const unsigned int SCR_HEIGHT = 600;
@@ -38,6 +27,63 @@ float lastX = SCR_WIDTH / 2.0f;
 float lastY = SCR_HEIGHT / 2.0f;
 bool firstMouse = true;
 bool isCameraActive = true;
+
+
+struct PointLight
+{
+	glm::vec3 positions[4] = {
+	glm::vec3(0.7f,  0.2f,  2.0f),
+	glm::vec3(2.3f, -3.3f, -4.0f),
+	glm::vec3(-4.0f,  2.0f, -12.0f),
+	glm::vec3(0.0f,  0.0f, -3.0f)
+	};
+
+	glm::vec3 ambient = glm::vec3(0.05f, 0.05f, 0.05f);
+	glm::vec3 diffuse = glm::vec3(0.8f, 0.8f, 0.8f);
+	glm::vec3 specular = glm::vec3(1.0f);
+
+	float linear = 0.09f;
+	float quadratic = 0.032f;
+};
+
+struct DirLight
+{
+	glm::vec3 direction = glm::vec3(-0.2f, -1.0f, -0.3f);
+	glm::vec3 ambient = glm::vec3(0.05f, 0.05f, 0.05f);
+	glm::vec3 diffuse = glm::vec3(0.4f, 0.4f, 0.4f);
+	glm::vec3 specular = glm::vec3(0.5f);
+};
+
+struct SpotLight
+{
+	glm::vec3 positions[4] = {
+	camera.Position,
+	glm::vec3(2.3f, -3.3f, -4.0f),
+	glm::vec3(-4.0f,  2.0f, -12.0f),
+	glm::vec3(0.0f,  0.0f, -3.0f)
+	};
+	glm::vec3 direction = camera.Front;
+	glm::vec3 ambient = glm::vec3(0.0f, 0.0f, 0.0f);
+	glm::vec3 diffuse = glm::vec3(1.0f, 1.0f, 1.0f);
+	glm::vec3 specular = glm::vec3(1.0f, 1.0f, 1.0f);
+
+	float linear = 0.09f;
+	float quadratic = 0.032f;
+
+	float innerCutOff = 12.5f;
+	float outerCutOff = 15.0f;
+};
+
+void framebuffer_size_callback(GLFWwindow* window, int width, int height);
+void mouse_callback(GLFWwindow* window, double xpos, double ypos);
+void scroll_callback(GLFWwindow* window, double xoffset, double yoffset);
+void processInput(GLFWwindow* window);
+unsigned int loadTexture(const char* path);
+
+void CreateDebugWindow(DirLight& dirLight, PointLight& pointLight, SpotLight& spotLight);
+void DirLightProperties(DirLight& dirLight);
+void PointLightProperties(PointLight& pointLight);
+void SpotLightProperties(SpotLight& spotLight);
 
 // timing
 float deltaTime = 0.0f;	// time between current frame and last frame
@@ -148,12 +194,7 @@ int main()
 	glm::vec3(-1.3f,  1.0f, -1.5f)
 	};
 
-	glm::vec3 pointLightPositions[] = {
-	glm::vec3(0.7f,  0.2f,  2.0f),
-	glm::vec3(2.3f, -3.3f, -4.0f),
-	glm::vec3(-4.0f,  2.0f, -12.0f),
-	glm::vec3(0.0f,  0.0f, -3.0f)
-	};
+
 
 	unsigned int VBO, cubeVAO;
 	glGenVertexArrays(1, &cubeVAO);
@@ -189,7 +230,7 @@ int main()
 	unsigned int diffuseMap = loadTexture("assets/container2.png");
 	unsigned int specularMap = loadTexture("assets/container2_specular.png");
 
-	
+
 	lightingShader.use();
 	lightingShader.setInt("material.diffuse", 0);
 	lightingShader.setInt("material.specular", 1);
@@ -212,16 +253,14 @@ int main()
 
 #pragma endregion
 
-	
+
 	// material properties
 	float m_shininess = 32.0f;
 
-	// light properties
-	glm::vec3 diffuseColor = glm::vec3(0.5f, 0.5f, 0.5f); // decrease the influence
-	glm::vec3 ambientColor = glm::vec3(0.2f, 0.2f, 0.2f); // low influence
-	glm::vec3 specularColor = glm::vec3(1.0f);
+	DirLight dirLight;
+	PointLight pointLight;
+	SpotLight spotlight;
 
-	
 	// render loop
 	// -----------
 	while (!glfwWindowShouldClose(window))
@@ -258,53 +297,40 @@ int main()
 		   by using 'Uniform buffer objects', but that is something we'll discuss in the 'Advanced GLSL' tutorial.
 		*/
 		// directional light
-		lightingShader.setVec3("dirLight.direction", -0.2f, -1.0f, -0.3f);
-		lightingShader.setVec3("dirLight.ambient", 0.05f, 0.05f, 0.05f);
-		lightingShader.setVec3("dirLight.diffuse", 0.4f, 0.4f, 0.4f);
-		lightingShader.setVec3("dirLight.specular", 0.5f, 0.5f, 0.5f);
-		// point light 1
-		lightingShader.setVec3("pointLights[0].position", pointLightPositions[0]);
-		lightingShader.setVec3("pointLights[0].ambient", 0.05f, 0.05f, 0.05f);
-		lightingShader.setVec3("pointLights[0].diffuse", 0.8f, 0.8f, 0.8f);
-		lightingShader.setVec3("pointLights[0].specular", 1.0f, 1.0f, 1.0f);
-		lightingShader.setFloat("pointLights[0].constant", 1.0f);
-		lightingShader.setFloat("pointLights[0].linear", 0.09f);
-		lightingShader.setFloat("pointLights[0].quadratic", 0.032f);
-		// point light 2
-		lightingShader.setVec3("pointLights[1].position", pointLightPositions[1]);
-		lightingShader.setVec3("pointLights[1].ambient", 0.05f, 0.05f, 0.05f);
-		lightingShader.setVec3("pointLights[1].diffuse", 0.8f, 0.8f, 0.8f);
-		lightingShader.setVec3("pointLights[1].specular", 1.0f, 1.0f, 1.0f);
-		lightingShader.setFloat("pointLights[1].constant", 1.0f);
-		lightingShader.setFloat("pointLights[1].linear", 0.09f);
-		lightingShader.setFloat("pointLights[1].quadratic", 0.032f);
-		// point light 3
-		lightingShader.setVec3("pointLights[2].position", pointLightPositions[2]);
-		lightingShader.setVec3("pointLights[2].ambient", 0.05f, 0.05f, 0.05f);
-		lightingShader.setVec3("pointLights[2].diffuse", 0.8f, 0.8f, 0.8f);
-		lightingShader.setVec3("pointLights[2].specular", 1.0f, 1.0f, 1.0f);
-		lightingShader.setFloat("pointLights[2].constant", 1.0f);
-		lightingShader.setFloat("pointLights[2].linear", 0.09f);
-		lightingShader.setFloat("pointLights[2].quadratic", 0.032f);
-		// point light 4
-		lightingShader.setVec3("pointLights[3].position", pointLightPositions[3]);
-		lightingShader.setVec3("pointLights[3].ambient", 0.05f, 0.05f, 0.05f);
-		lightingShader.setVec3("pointLights[3].diffuse", 0.8f, 0.8f, 0.8f);
-		lightingShader.setVec3("pointLights[3].specular", 1.0f, 1.0f, 1.0f);
-		lightingShader.setFloat("pointLights[3].constant", 1.0f);
-		lightingShader.setFloat("pointLights[3].linear", 0.09f);
-		lightingShader.setFloat("pointLights[3].quadratic", 0.032f);
+		lightingShader.setVec3("dirLight.direction", dirLight.direction);
+		lightingShader.setVec3("dirLight.ambient", dirLight.ambient);
+		lightingShader.setVec3("dirLight.diffuse", dirLight.diffuse);
+		lightingShader.setVec3("dirLight.specular", dirLight.specular);
+		
 		// spotLight
 		lightingShader.setVec3("spotLight.position", camera.Position);
 		lightingShader.setVec3("spotLight.direction", camera.Front);
-		lightingShader.setVec3("spotLight.ambient", 0.0f, 0.0f, 0.0f);
-		lightingShader.setVec3("spotLight.diffuse", 1.0f, 1.0f, 1.0f);
-		lightingShader.setVec3("spotLight.specular", 1.0f, 1.0f, 1.0f);
+		lightingShader.setVec3("spotLight.ambient", spotlight.ambient);
+		lightingShader.setVec3("spotLight.diffuse", spotlight.diffuse);
+		lightingShader.setVec3("spotLight.specular", spotlight.specular);
 		lightingShader.setFloat("spotLight.constant", 1.0f);
-		lightingShader.setFloat("spotLight.linear", 0.09f);
-		lightingShader.setFloat("spotLight.quadratic", 0.032f);
-		lightingShader.setFloat("spotLight.cutOff", glm::cos(glm::radians(12.5f)));
-		lightingShader.setFloat("spotLight.outerCutOff", glm::cos(glm::radians(15.0f)));
+		lightingShader.setFloat("spotLight.linear", spotlight.linear);
+		lightingShader.setFloat("spotLight.quadratic", spotlight.quadratic);
+		lightingShader.setFloat("spotLight.cutOff", glm::cos(glm::radians(spotlight.innerCutOff)));
+		lightingShader.setFloat("spotLight.outerCutOff", glm::cos(glm::radians(spotlight.outerCutOff)));
+
+		for (unsigned int i{0}; i < IM_ARRAYSIZE(pointLight.positions); i++)
+		{
+			std::string position = "pointLights[" + std::to_string(i) + "].position";
+			std::string ambient = "pointLights[" + std::to_string(i) + "].ambient";
+			std::string diffuse = "pointLights[" + std::to_string(i) + "].diffuse";
+			std::string specular = "pointLights[" + std::to_string(i) + "].specular";
+			std::string constant = "pointLights[" + std::to_string(i) + "].constant";
+			std::string linear = "pointLights[" + std::to_string(i) + "].linear";
+			std::string quadratic = "pointLights[" + std::to_string(i) + "].quadratic";
+			lightingShader.setVec3(position, pointLight.positions[i]);
+			lightingShader.setVec3(ambient, pointLight.ambient);
+			lightingShader.setVec3(diffuse, pointLight.diffuse);
+			lightingShader.setVec3(specular, pointLight.specular);
+			lightingShader.setFloat(constant, 1.0f);
+			lightingShader.setFloat(linear, pointLight.linear);
+			lightingShader.setFloat(quadratic, pointLight.quadratic);
+		}
 
 		// view/projection transformations
 		glm::mat4 projection = glm::perspective(glm::radians(camera.Zoom), (float)SCR_WIDTH / (float)SCR_HEIGHT, 0.1f, 100.0f);
@@ -347,18 +373,14 @@ int main()
 		for (unsigned int i = 0; i < 4; i++)
 		{
 			model = glm::mat4(1.0f);
-			model = glm::translate(model, pointLightPositions[i]);
+			model = glm::translate(model, pointLight.positions[i]);
 			model = glm::scale(model, glm::vec3(0.2f)); // Make it a smaller cube
 			lightCubeShader.setMat4("model", model);
 			glDrawArrays(GL_TRIANGLES, 0, 36);
 		}
 
 
-		//EditObjectColor(objectColor);
-		//UpdateLightPos(lightPos);
-		//MaterialProperties(m_ambient, m_diffuse, m_specular, m_shininess);
-		//LightProperties(ambientColor, diffuseColor, specularColor);
-
+		CreateDebugWindow(dirLight, pointLight, spotlight);
 		ImGui::ShowDemoWindow();
 
 
@@ -417,7 +439,7 @@ void processInput(GLFWwindow* window)
 
 	if (glfwGetKey(window, GLFW_KEY_I) == GLFW_PRESS)
 	{
-		if (!iKeyPressedLastFrame) 
+		if (!iKeyPressedLastFrame)
 		{
 			if (!cursorEnabled)
 			{
@@ -442,89 +464,76 @@ void processInput(GLFWwindow* window)
 
 }
 
-void EditObjectColor(glm::vec3& inColor)
+void CreateDebugWindow(DirLight& dirLight, PointLight& pointLight, SpotLight& spotLight)
 {
 	ImGui::Begin("Debug Window");
 
-	ImGui::Text("Object Color");
-	ImGui::ColorEdit3("Color", (float*)&inColor, ImGuiColorEditFlags_Float);
+	DirLightProperties(dirLight);
+	PointLightProperties(pointLight);
+	SpotLightProperties(spotLight);
 
 	ImGui::End();
 }
 
-void UpdateLightPos(glm::vec3& lightPos)
+
+void DirLightProperties(DirLight& dirLight)
 {
-	ImGui::Begin("Debug Window");
-	ImGui::NewLine();
-	ImGui::Text("Light Position");
-
-	float sliderWidth = 100.0f;
-	ImGui::PushItemWidth(sliderWidth);
-
-	ImGui::SliderFloat("##X", &lightPos.x, -10.0f, 100.0f, "X: %.1f", ImGuiSliderFlags_Logarithmic);
-	ImGui::SameLine();
-	ImGui::SliderFloat("##Y", &lightPos.y, -10.0f, 100.0f, "Y: %.1f", ImGuiSliderFlags_Logarithmic);
-	ImGui::SameLine();
-	ImGui::SliderFloat("##Z", &lightPos.z, -10.0f, 100.0f, "Z: %.1f", ImGuiSliderFlags_Logarithmic);
-
-	ImGui::PopItemWidth();
-
-	ImGui::End();
+	if (ImGui::CollapsingHeader("Directional Lights", ImGuiTreeNodeFlags_DefaultOpen))
+	{
+		ImGui::DragFloat3("Direction##dir", &dirLight.direction.x, 0.01f, -100.f, 100.f);
+		ImGui::ColorEdit3("Ambient##dir", (float*)&dirLight.ambient, ImGuiColorEditFlags_Float);
+		ImGui::ColorEdit3("Diffuse##dir", (float*)&dirLight.diffuse, ImGuiColorEditFlags_Float);
+		ImGui::ColorEdit3("Specular##dir", (float*)&dirLight.specular, ImGuiColorEditFlags_Float);
+	}
 }
 
-void MaterialProperties(glm::vec3& ambient, glm::vec3& diffuse, glm::vec3& specular, float& shininess)
+void PointLightProperties(PointLight& pointLight)
 {
-	ImGui::Begin("Debug Window");
-	ImGui::NewLine();
+	static int item_selected_idx = 0;
 
-	ImGui::Text("Material Properties");
+	const char* items[] = { "PointLight1", "PointLight2", "PointLight3", "PointLight4" };
 
-	// ambient
-	//ImGui::DragFloat3("##m_ambient", &ambient.x, 0.01f, 0.f, 1.f);
-	//ImGui::SameLine();
-	//ImGui::Text("Ambient");
+	const char* combo_preview_value = items[item_selected_idx];
 
-	//// diffuse
-	//ImGui::DragFloat3("##m_diffuse", &diffuse.x, 0.01f, 0.f, 1.f);
-	//ImGui::SameLine();
-	//ImGui::Text("Diffuse");
+	if (ImGui::CollapsingHeader("Point Lights", ImGuiTreeNodeFlags_DefaultOpen))
+	{
+		if (ImGui::BeginCombo("Light Source", combo_preview_value, 0))
+		{
+			for (int n = 0; n < IM_ARRAYSIZE(items); n++)
+			{
+				const bool is_selected = (item_selected_idx == n);
+				if (ImGui::Selectable(items[n], is_selected))
+					item_selected_idx = n;
 
-	//// specular
-	//ImGui::DragFloat3("##m_specular", &specular.x, 0.01f, 0.f, 1.f);
-	//ImGui::SameLine();
-	//ImGui::Text("Specular");
+				// Set the initial focus when opening the combo (scrolling + keyboard navigation focus)
+				if (is_selected)
+					ImGui::SetItemDefaultFocus();
+			}
+			ImGui::EndCombo();
+		}
+		ImGui::DragFloat3("Position##point", &pointLight.positions[item_selected_idx].x, 0.01f, -100.f, 100.f);
+		ImGui::ColorEdit3("Ambient##point", (float*)&pointLight.ambient, ImGuiColorEditFlags_Float);
+		ImGui::ColorEdit3("Diffuse##point", (float*)&pointLight.diffuse, ImGuiColorEditFlags_Float);
+		ImGui::ColorEdit3("Specular##point", (float*)&pointLight.specular, ImGuiColorEditFlags_Float);
+		ImGui::InputFloat("Linear##point", &pointLight.linear, 0.1f, 1.0f, "%.2f");
+		ImGui::InputFloat("Quadratic##point", &pointLight.quadratic, 0.1f, 1.0f, "%.2f");
+	}
 
-	// shininess
-	ImGui::DragFloat("##shininess", &shininess, 0.01f, 1.f, 128.f);
-	ImGui::SameLine();
-	ImGui::Text("Shininess");
-
-	ImGui::End();
 }
 
-void LightProperties(glm::vec3& ambient, glm::vec3& diffuse, glm::vec3& specular)
+void SpotLightProperties(SpotLight& spotLight)
 {
-	ImGui::Begin("Debug Window");
-	ImGui::NewLine();
+	if (ImGui::CollapsingHeader("Spot Lights", ImGuiTreeNodeFlags_DefaultOpen))
+	{
+		//ImGui::DragFloat3("Position##spot", &spotLight.positions[].x, 0.01f, -100.f, 100.f);
+		ImGui::DragFloat3("Direction##spot", &spotLight.direction.x, 0.01f, -100.f, 100.f);
+		ImGui::ColorEdit3("Ambient##spot", (float*)&spotLight.ambient, ImGuiColorEditFlags_Float);
+		ImGui::ColorEdit3("Diffuse##spot", (float*)&spotLight.diffuse, ImGuiColorEditFlags_Float);
+		ImGui::ColorEdit3("Specular##spot", (float*)&spotLight.specular, ImGuiColorEditFlags_Float);
 
-	ImGui::Text("Light Properties");
-
-	// ambient
-	ImGui::DragFloat3("##ambient", &ambient.x, 0.01f, 0.f, 1.f);
-	ImGui::SameLine();
-	ImGui::Text("Ambient");
-
-	// diffuse
-	ImGui::DragFloat3("##diffuse", &diffuse.x, 0.01f, 0.f, 1.f);
-	ImGui::SameLine();
-	ImGui::Text("Diffuse");
-
-	// specular
-	ImGui::DragFloat3("##specular", &specular.x, 0.01f, 0.f, 1.f);
-	ImGui::SameLine();
-	ImGui::Text("Specular");
-
-	ImGui::End();
+		ImGui::DragFloat("InnerCutOff##spot", &spotLight.innerCutOff, 0.5f, 0.0f, 180.f);
+		ImGui::DragFloat("OuterCutOff##spot", &spotLight.outerCutOff, 0.5f, 0.0f, 180.f);
+	}
 }
 
 unsigned int loadTexture(const char* path)

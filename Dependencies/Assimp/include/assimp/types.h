@@ -77,17 +77,6 @@ typedef uint32_t ai_uint32;
 #include <new>    // for std::nothrow_t
 #include <string> // for aiString::Set(const std::string&)
 
-struct aiNode;
-struct aiMesh;
-struct aiMaterial;
-
-#include <vector>
-
-
-using MeshArray = std::vector<aiMesh *>;
-using NodeArray = std::vector<aiNode *>;
-using MaterialArray = std::vector<aiMaterial*>;
-
 namespace Assimp {
 //! @cond never
 namespace Intern {
@@ -129,7 +118,7 @@ extern "C" {
 
 /** Maximum dimension for strings, ASSIMP strings are zero terminated. */
 #ifdef __cplusplus
-static constexpr size_t AI_MAXLEN = 1024;
+static const size_t AI_MAXLEN = 1024;
 #else
 #define AI_MAXLEN 1024
 #endif

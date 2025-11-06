@@ -102,8 +102,8 @@
   <ItemGroup>
     <None Include="res\shaders\shader.vs" />
     <None Include="res\shaders\shader.fs" />
-    <None Include="res\shaders\lightingShader.vs" />
-    <None Include="res\shaders\lightingShader.fs" />
+    <None Include="res\shaders\skybox.vs" />
+    <None Include="res\shaders\skybox.fs" />
     <None Include=".gitignore" />
   </ItemGroup>
 </Project>
